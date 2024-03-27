@@ -1,6 +1,4 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
-#![allow(dead_code)] // TODO remove when approaching completion 🏁
-#![allow(unused)] // TODO remove when approaching completion 🏁
 
 #[ink::contract]
 mod psp22 {
