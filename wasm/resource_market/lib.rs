@@ -8,7 +8,7 @@
 /// contributions. You are not required to withdraw the same resources you contributed.
 #[ink::contract]
 mod resource_market {
-	use ink::storage::Mapping;
+	use ink::{codegen::EmitEvent, reflect::ContractEventBase, storage::Mapping};
 
 	/// There are three resources needed to survive: Water, Food, and Wood.
 	#[derive(Debug, Copy, Clone, PartialEq, Eq, scale::Decode, scale::Encode)]
@@ -46,6 +46,8 @@ mod resource_market {
 	/// Type alias for the contract's `Result` type.
 	pub type Result<T> = core::result::Result<T, Error>;
 
+	pub type Event = <ResourceMarket as ContractEventBase>::Type;
+
 	/// Emitted when resources are contributed
 	#[ink(event)]
 	pub struct ContributionReceived {
@@ -82,26 +84,61 @@ mod resource_market {
 		/// Constructor that initializes the resources values and creates a default mapping
 		#[ink(constructor)]
 		pub fn new(food: u64, water: u64, wood: u64) -> Self {
-			todo!()
+			ResourceMarket { food, water, wood, credits: Default::default() }
 		}
 
 		/// Contribute some of your own private resources to the market.
 		/// Contributions are made one asset at a time.
 		#[ink(message)]
 		pub fn contribute(&mut self, amount: u64, resource: Resource) -> Result<()> {
-			todo!()
+			let caller = self.env().caller();
+			match resource {
+				Resource::Food => self.food += amount,
+				Resource::Water => self.water += amount,
+				Resource::Wood => self.wood += amount,
+			}
+
+			let mut old_balance = self.credits.get(caller).unwrap();
+			self.credits.insert(caller, &(old_balance.saturating_add(amount)));
+
+			let total_resources = match resource {
+				Resource::Food => self.food,
+				Resource::Water => self.water,
+				Resource::Wood => self.wood,
+			};
+
+			let sender_available_credits = old_balance.saturating_add(amount);
+
+			Self::emit_event(
+				self.env(),
+				Event::ContributionReceived(ContributionReceived {
+					sender: caller,
+					amount,
+					resource,
+					total_resource_available: total_resources,
+					total_credits_available: sender_available_credits,
+				}),
+			);
+			Ok(())
 		}
 
 		/// Withdraw some resources from the market into your own private reserves.
 		#[ink(message)]
 		pub fn withdraw(&self, amount: u64, resource: Resource) -> Result<()> {
-			todo!()
+			Ok(())
 		}
 
 		/// Get the amount of resource available
 		#[ink(message)]
 		pub fn get_resource(&self, resource: Resource) -> Result<u64> {
 			todo!()
+		}
+
+		fn emit_event<EE>(emitter: EE, event: Event)
+		where
+			EE: EmitEvent<Self>,
+		{
+			emitter.emit_event(event);
 		}
 	}
 
