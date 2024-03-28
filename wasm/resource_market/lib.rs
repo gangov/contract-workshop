@@ -98,7 +98,7 @@ mod resource_market {
 				Resource::Wood => self.wood += amount,
 			}
 
-			let mut old_balance = self.credits.get(caller).unwrap();
+			let mut old_balance = self.credits.get(caller).unwrap_or(0);
 			self.credits.insert(caller, &(old_balance.saturating_add(amount)));
 
 			let total_resources = match resource {
@@ -124,14 +124,95 @@ mod resource_market {
 
 		/// Withdraw some resources from the market into your own private reserves.
 		#[ink(message)]
-		pub fn withdraw(&self, amount: u64, resource: Resource) -> Result<()> {
+		pub fn withdraw(&mut self, amount: u64, resource: Resource) -> Result<()> {
+			let caller = self.env().caller();
+
+			match resource {
+				Resource::Food => {
+					if self.food < amount {
+						return Err(Error::InsufficientResources);
+					}
+
+					let caller_credits = self.credits.get(caller).unwrap_or(0);
+					if caller_credits < amount {
+						return Err(Error::InsufficientCredits);
+					}
+
+					self.food = self.food.saturating_sub(amount);
+					self.credits.insert(caller, &(caller_credits.saturating_sub(amount)));
+
+					Self::emit_event(
+						self.env(),
+						Event::ResourceWithdrawn(ResourceWithdrawn {
+							sender: caller,
+							amount,
+							resource,
+							total_resource_available: self.food - amount,
+							total_credits_available: caller_credits - amount,
+						}),
+					);
+				},
+				Resource::Water => {
+					if self.water < amount {
+						return Err(Error::InsufficientResources);
+					}
+
+					let caller_credits = self.credits.get(caller).unwrap_or(0);
+					if caller_credits < amount {
+						return Err(Error::InsufficientCredits);
+					}
+
+					self.water = self.water.saturating_sub(amount);
+					self.credits.insert(caller, &(caller_credits.saturating_sub(amount)));
+
+					Self::emit_event(
+						self.env(),
+						Event::ResourceWithdrawn(ResourceWithdrawn {
+							sender: caller,
+							amount,
+							resource,
+							total_resource_available: self.water - amount,
+							total_credits_available: caller_credits - amount,
+						}),
+					);
+				},
+				Resource::Wood => {
+					if self.wood < amount {
+						return Err(Error::InsufficientResources);
+					}
+
+					let caller_credits = self.credits.get(caller).unwrap_or(0);
+					if caller_credits < amount {
+						return Err(Error::InsufficientCredits);
+					}
+
+					self.wood = self.wood.saturating_sub(amount);
+					self.credits.insert(caller, &(caller_credits.saturating_sub(amount)));
+
+					Self::emit_event(
+						self.env(),
+						Event::ResourceWithdrawn(ResourceWithdrawn {
+							sender: caller,
+							amount,
+							resource,
+							total_resource_available: self.wood - amount,
+							total_credits_available: caller_credits - amount,
+						}),
+					);
+				},
+			}
+
 			Ok(())
 		}
 
 		/// Get the amount of resource available
 		#[ink(message)]
 		pub fn get_resource(&self, resource: Resource) -> Result<u64> {
-			todo!()
+			match resource {
+				Resource::Food => Ok(self.food),
+				Resource::Water => Ok(self.water),
+				Resource::Wood => Ok(self.wood),
+			}
 		}
 
 		fn emit_event<EE>(emitter: EE, event: Event)
@@ -174,6 +255,15 @@ mod resource_market {
 			ink::env::test::set_caller::<Environment>(caller);
 		}
 
+		fn set_next_caller_with_credits(
+			caller: AccountId,
+			credits: u64,
+			market: &mut ResourceMarket,
+		) {
+			ink::env::test::set_caller::<Environment>(caller);
+			market.credits.insert(caller, &credits);
+		}
+
 		/// Testing the constructor
 		#[ink::test]
 		fn test_constructor_works() {
@@ -193,11 +283,20 @@ mod resource_market {
 
 			assert_eq!(result, Ok(()));
 			assert_eq!(resource_market.get_resource(Resource::Water), Ok(10));
+			assert_eq!(resource_market.credits.get(default_accounts.alice), Some(10));
 		}
 
 		#[ink::test]
 		fn test_withdrawing_works() {
-			todo!()
+			let default_accounts = default_accounts();
+
+			let mut resource_market = ResourceMarket::new(100, 100, 100);
+			set_next_caller_with_credits(default_accounts.bob, 100, &mut resource_market);
+
+			let result = resource_market.withdraw(50, Resource::Water);
+			assert_eq!(result, Ok(()));
+			assert_eq!(resource_market.get_resource(Resource::Water), Ok(50));
+			assert_eq!(resource_market.credits.get(default_accounts.bob), Some(50)); // contributed 100 water, took 50 water
 		}
 
 		#[ink::test]
@@ -239,12 +338,35 @@ mod resource_market {
 
 		#[ink::test]
 		fn test_withdrawing_resources_not_available_fails() {
-			todo!()
+			let default_accounts = default_accounts();
+			set_next_caller(default_accounts.bob);
+
+			let mut resource_market = ResourceMarket::new(0, 0, 0);
+			let result = resource_market.withdraw(50, Resource::Water);
+			assert_eq!(result, Err(Error::InsufficientResources));
 		}
 
 		#[ink::test]
 		fn test_withdrawing_resources_contributed_by_someone_else() {
-			todo!()
+			let default_accounts = default_accounts();
+			set_next_caller(default_accounts.bob);
+
+			let mut resource_market = ResourceMarket::new(0, 0, 0);
+			resource_market.contribute(100, Resource::Food);
+			resource_market.contribute(50, Resource::Water);
+			resource_market.contribute(150, Resource::Wood);
+
+			assert_eq!(resource_market.get_resource(Resource::Water), Ok(50));
+			assert_eq!(resource_market.get_resource(Resource::Food), Ok(100));
+			assert_eq!(resource_market.get_resource(Resource::Wood), Ok(150));
+			assert_eq!(resource_market.credits.get(default_accounts.bob), Some(300));
+
+			set_next_caller_with_credits(default_accounts.alice, 500, &mut resource_market);
+			for resource in [Resource::Water, Resource::Food, Resource::Wood] {
+				resource_market.withdraw(10, resource);
+			}
+
+			assert_eq!(resource_market.credits.get(default_accounts.alice), Some(470)); // contributed nothing, took 30 in total
 		}
 	}
 }
