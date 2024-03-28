@@ -1,6 +1,4 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
-#![allow(dead_code)] // TODO remove when approaching completion 🏁
-#![allow(unused)] // TODO remove when approaching completion 🏁
 
 /// Most individuals can only produce one or two of the resources, and therefore collaboration is
 /// necessary for survival. Therefore we create a free market in which participants can contribute
