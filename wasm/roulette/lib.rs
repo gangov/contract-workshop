@@ -113,7 +113,7 @@ mod roulette {
             maximal_number_of_bets: u8,
             minimal_bet_amount: Balance,
         ) -> Self {
-            todo!()
+            Self { data: Default::default(), bets: Default::default() }
         }
 
         /// Returns the end of the current betting period
